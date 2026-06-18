@@ -1,6 +1,6 @@
 {
   "name": "pluggedin-desk-bridge",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Push a PluggedIn event's master patch to a Behringer X32 / Midas M32 live over OSC.",
   "license": "MIT",

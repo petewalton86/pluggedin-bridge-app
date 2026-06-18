@@ -6,28 +6,45 @@ straight from PluggedIn.
 
 A browser can't talk to a console (consoles listen on UDP/OSC), so this small
 tool runs on the **FOH laptop**, on the **same network as the desk**. It pulls
-the resolved channel list from the PluggedIn API (or an exported file) and
-sends OSC to the desk.
+the resolved channel list from the PluggedIn API and sends OSC to the desk.
+
+## Pairing (no password)
+
+The bridge never uses your account password. Instead you **pair** it once:
+
+1. In PluggedIn, open a master patch → **Send to desk → Connect a desk bridge**.
+2. Click **Generate pairing code** — you get a short code like `9A7M-JHZU`.
+3. Run the bridge and enter the code when prompted.
+
+The bridge swaps the code for a **scoped, read-only, revocable token** (it can
+only read your events' console patches) and remembers it on this device, so you
+only pair once. Revoke a device any time from the same dialog.
 
 ## Two ways to run it
 
-**A. Single executable (recommended for engineers).** Build a double-clickable
-`PluggedInBridge.exe` / `PluggedInBridge` — no Node install needed on the FOH
-laptop. See **[BUILD.md](BUILD.md)**. Double-click it and answer the prompts.
+**A. Single executable (recommended for engineers).** A double-clickable
+`PluggedInBridge.exe` (Windows) / `PluggedInBridge` (macOS, Linux) — no Node
+install needed. Grab the latest from
+[**Releases**](https://github.com/petewalton86/pluggedin-bridge-app/releases),
+or build it yourself with **[BUILD.md](BUILD.md)**. Double-click and follow the
+prompts.
 
-**B. With Node** (for developers / quick use). Node 18+; no dependencies:
+> Release binaries are currently **unsigned**, so Windows SmartScreen / macOS
+> Gatekeeper may warn on first launch (right-click → Open on macOS). Signing is a
+> documented TODO in [BUILD.md](BUILD.md) and the release workflow.
+
+**B. With Node** (developers / quick use). Node 18+; no dependencies:
 ```bash
-node bridge.mjs                     # prompts for everything
-node bridge.mjs --event <id> --desk 192.168.0.10 \
-  --email you@example.com --password '••••••'
+node bridge.mjs            # prompts: pair (first run), pick an event, desk IP
 ```
 
-Run with **no options** and it prompts for sign-in, event id and desk IP.
+Run with **no options** and it pairs (first time), lists your events to pick
+from, and asks for the desk IP. No event id to hunt down.
 
 ## Preview / offline use
 ```bash
 # preview without a desk
-node bridge.mjs --event <id> --dry-run --email you@x --password '••••'
+node bridge.mjs --dry-run
 
 # fully offline: in the web app, Send to desk → Patch data (.json), then
 node bridge.mjs --in master-patch-myevent.json --desk 192.168.0.10
@@ -36,16 +53,22 @@ node bridge.mjs --in master-patch-myevent.json --desk 192.168.0.10
 ## Options (flags, env vars, or interactive prompts)
 | Flag | Env | Default | Notes |
 |---|---|---|---|
-| `--event` | `PI_EVENT` | — | The event id |
+| `--event` | `PI_EVENT` | — | Event id (skip the picker) |
 | `--desk` | `PI_DESK` | — | Console IP (omit + `--dry-run` to preview) |
 | `--port` | `PI_DESK_PORT` | `10023` | X32/M32 OSC port (X‑Air uses `10024`) |
 | `--api` | `PI_API` | `http://localhost:4000` | PluggedIn API base URL |
-| `--token` | `PI_TOKEN` | — | Session token, instead of email/password |
-| `--email` / `--password` | `PI_EMAIL` / `PI_PASSWORD` | — | Sign in |
+| `--code` | `PI_CODE` | — | Pair non-interactively with this code |
+| `--token` | `PI_TOKEN` | — | Use a bridge token directly (skip pairing/storage) |
+| `--label` | `PI_LABEL` | hostname | How this device appears in PluggedIn |
+| `--reset` | — | — | Forget the saved token and re-pair |
 | `--in` | `PI_IN` | — | Exported patch `.json`, instead of the API |
 | `--pace` | — | `25` | ms between OSC messages |
 | `--dry-run` | — | off | Print the OSC messages instead of sending |
 | `-h, --help` | — | — | Show help |
+
+The saved token lives in `~/.pluggedin-bridge.json` (keyed by API URL, file mode
+`600`). Delete it or use `--reset` to forget a device locally; revoke it in
+PluggedIn to kill it server-side.
 
 ## What it sets
 Per console channel, in master‑patch order (bounded by the venue's desk size):
@@ -68,5 +91,4 @@ npm run package        # build the single-file executable (see BUILD.md)
 
 ## Roadmap
 - Verify the OSC parameter set against an X32/M32 (and X‑Air) on the bench.
-- Pairing‑code sign‑in so credentials are never typed at FOH.
 - Additional OSC desks (Behringer/Midas Wing, DiGiCo SD/Quantum).

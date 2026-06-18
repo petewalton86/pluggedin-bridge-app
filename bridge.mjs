@@ -1,16 +1,19 @@
 #!/usr/bin/env node
-// PluggedIn desk bridge — push an event's master patch to a Behringer X32 /
-// Midas M32 live over OSC. Run this on the FOH laptop (same network as the
-// desk). It pulls the resolved channel list from the PluggedIn API (or an
-// exported --in file) and sets each channel's name, colour, source and 48V.
+// PluggedIn desk bridge — preload a Behringer X32 / Midas M32 from an event's
+// master patch over OSC. Runs on the FOH laptop (same network as the desk).
 //
-// Run with NO options to be prompted for everything (double-click friendly):
-//   pluggedin-bridge
-// Or pass flags / env vars:
-//   node bridge.mjs --event <id> --desk 192.168.0.10 --email you@x --password ****
+// Auth is a one-time PAIRING: in PluggedIn, open Send to desk → Connect a bridge
+// to get a short code; type it here once and this device is remembered with a
+// scoped, revocable, read-only token (your account password is never used).
+//
+//   pluggedin-bridge                 # prompts: pair (first run), pick event, desk IP
+//   pluggedin-bridge --dry-run       # preview without a desk
+//   pluggedin-bridge --in patch.json --desk 192.168.0.10   # fully offline
 
 import readline from 'node:readline'
-import { readFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { readFile, writeFile } from 'node:fs/promises'
 import { buildMessages } from './x32.mjs'
 import { sendMessages } from './udp.mjs'
 
@@ -19,22 +22,24 @@ const HELP = `PluggedIn Desk Bridge — preload an X32/M32 from an event's maste
 Usage:
   pluggedin-bridge [options]
 
-Run with no options to be prompted for each value.
+First run prompts for a pairing code (PluggedIn → Send to desk → Connect a
+bridge), then remembers this device. Later runs just pick an event and push.
 
 Options:
-  --event <id>           Event id
+  --event <id>           Event id (skip the picker)
   --desk <ip>            Console IP (omit and use --dry-run to preview)
   --port <n>             OSC port (default 10023; X-Air uses 10024)
   --api <url>            PluggedIn API base (default http://localhost:4000)
-  --token <jwt>          Session token (instead of email/password)
-  --email <e>            Sign-in email
-  --password <p>         Sign-in password
+  --code <pairing-code>  Pair non-interactively with this code
+  --token <bridge-token> Use a bridge token directly (skip pairing/storage)
+  --label <name>         Label this device in PluggedIn (default: hostname)
+  --reset                Forget the saved token for this API and re-pair
   --in <file.json>       Use an exported patch file instead of the API
   --pace <ms>            Delay between OSC messages (default 25)
   --dry-run              Print the OSC messages instead of sending
   -h, --help             Show this help
 
-Env vars: PI_API PI_EVENT PI_DESK PI_DESK_PORT PI_TOKEN PI_EMAIL PI_PASSWORD`
+Env: PI_API PI_EVENT PI_DESK PI_DESK_PORT PI_TOKEN PI_CODE PI_LABEL PI_IN`
 
 function parseArgs(argv) {
   const a = {}
@@ -60,18 +65,18 @@ const args = parseArgs(process.argv.slice(2))
 const env = process.env
 const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY)
 
-// Accept "localhost:4000" or "host" without a scheme — default to http://.
-const normalizeApi = (u) => {
-  const s = (u || '').trim().replace(/\/+$/, '')
-  return s && !/^https?:\/\//i.test(s) ? `http://${s}` : s
-}
-
 if (args.help) {
   console.log(HELP)
   process.exit(0)
 }
 
-// ---- prompting -------------------------------------------------------------
+// Accept "localhost:4000" / "host" without a scheme — default to http://.
+const normalizeApi = (u) => {
+  const s = (u || '').trim().replace(/\/+$/, '')
+  return s && !/^https?:\/\//i.test(s) ? `http://${s}` : s
+}
+
+// ── prompting ───────────────────────────────────────────────────────────────
 function ask(query, { def = '' } = {}) {
   return new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
@@ -82,30 +87,99 @@ function ask(query, { def = '' } = {}) {
   })
 }
 
-function askHidden(query) {
-  return new Promise((resolve) => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true })
-    let muted = false
-    rl._writeToOutput = (s) => {
-      if (!muted) rl.output.write(s) // the prompt prints; keystrokes are hidden
-    }
-    rl.question(`${query}: `, (a) => {
-      rl.close()
-      process.stdout.write('\n')
-      resolve((a || '').trim())
-    })
-    muted = true
-  })
-}
-
-// ---- error handling --------------------------------------------------------
 async function die(msg) {
   console.error(`\n✖ ${msg}`)
   if (interactive) await ask('\nPress Enter to close')
   process.exit(1)
 }
 
-// ---- config ----------------------------------------------------------------
+// ── token storage (~/.pluggedin-bridge.json, keyed by API URL) ───────────────
+const STORE = path.join(os.homedir(), '.pluggedin-bridge.json')
+
+async function readStore() {
+  try {
+    return JSON.parse(await readFile(STORE, 'utf8'))
+  } catch {
+    return {}
+  }
+}
+async function writeStore(obj) {
+  try {
+    await writeFile(STORE, JSON.stringify(obj, null, 2), { mode: 0o600 })
+  } catch {
+    /* non-fatal: we just won't remember the token */
+  }
+}
+async function getStoredToken(api) {
+  const e = (await readStore())[api]
+  if (e?.token && (!e.expiresAt || new Date(e.expiresAt) > new Date())) return e.token
+  return null
+}
+async function storeToken(api, token, expiresAt) {
+  const s = await readStore()
+  s[api] = { token, expiresAt }
+  await writeStore(s)
+}
+async function clearToken(api) {
+  const s = await readStore()
+  delete s[api]
+  await writeStore(s)
+}
+
+// ── pairing + authed requests ────────────────────────────────────────────────
+async function pair(cfg, code) {
+  const res = await fetch(`${cfg.api}/api/bridge/pair`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ code, label: cfg.label || os.hostname() }),
+  }).catch(() => null)
+  if (!res) return die(`Cannot reach the API at ${cfg.api}. Is the URL correct?`)
+  if (res.status === 429) return die('Too many attempts — wait a few minutes and try again.')
+  if (!res.ok)
+    return die(
+      'That pairing code was invalid or expired. Generate a new one in PluggedIn\n(Send to desk → Connect a bridge).',
+    )
+  return res.json() // { token, expiresAt }
+}
+
+async function ensureToken(cfg) {
+  if (cfg.token) return cfg.token
+  const saved = await getStoredToken(cfg.api)
+  if (saved) return saved
+  let code = cfg.code
+  if (!code) {
+    if (!interactive)
+      return die('This device isn’t paired. Run once interactively, or pass --code <pairing-code>.')
+    console.log('\nThis device isn’t paired yet.')
+    console.log('In PluggedIn: Send to desk → Connect a bridge → generate a pairing code.')
+    code = await ask('Enter pairing code')
+  }
+  const { token, expiresAt } = await pair(cfg, code)
+  await storeToken(cfg.api, token, expiresAt)
+  console.log('Paired ✓ — this device is remembered.')
+  return token
+}
+
+// GET with the bridge token; on 401 forget the token and re-pair once.
+async function authedGet(cfg, urlPath) {
+  let token = await ensureToken(cfg)
+  let res = await fetch(`${cfg.api}${urlPath}`, {
+    headers: { authorization: `Bearer ${token}` },
+  }).catch(() => null)
+  if (res && res.status === 401 && !cfg.token) {
+    await clearToken(cfg.api)
+    console.log('\nSaved token expired or revoked — re-pairing.')
+    token = await ensureToken(cfg)
+    res = await fetch(`${cfg.api}${urlPath}`, {
+      headers: { authorization: `Bearer ${token}` },
+    }).catch(() => null)
+  }
+  if (!res) return die(`Cannot reach the API at ${cfg.api}.`)
+  if (res.status === 401) return die('Bridge token rejected (expired or revoked).')
+  return res
+}
+
+// ── config ───────────────────────────────────────────────────────────────────
 async function gather() {
   const cfg = {
     api: normalizeApi(args.api || env.PI_API || 'http://localhost:4000'),
@@ -115,19 +189,13 @@ async function gather() {
     pace: Number(args.pace || 25),
     dryRun: Boolean(args['dry-run']),
     token: args.token || env.PI_TOKEN,
-    email: args.email || env.PI_EMAIL,
-    password: args.password || env.PI_PASSWORD,
+    code: args.code || env.PI_CODE,
+    label: args.label || env.PI_LABEL,
     inFile: args.in || env.PI_IN,
   }
-
   if (interactive && !cfg.inFile) {
     if (args.api === undefined && !env.PI_API)
       cfg.api = normalizeApi(await ask('PluggedIn API URL', { def: cfg.api }))
-    if (!cfg.token) {
-      if (!cfg.email) cfg.email = await ask('Email')
-      if (!cfg.password) cfg.password = await askHidden('Password')
-    }
-    if (!cfg.eventId) cfg.eventId = await ask('Event id')
     if (!cfg.desk && !cfg.dryRun) {
       cfg.desk = await ask('Console IP (blank to preview only)')
       if (!cfg.desk) cfg.dryRun = true
@@ -136,27 +204,26 @@ async function gather() {
   return cfg
 }
 
-// ---- API -------------------------------------------------------------------
-async function login(cfg) {
-  const res = await fetch(`${cfg.api}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email: cfg.email, password: cfg.password }),
-  }).catch(() => null)
-  if (!res) return die(`Cannot reach the API at ${cfg.api}. Is the URL correct?`)
-  if (!res.ok) return die(`Login failed (${res.status}). Check your email/password.`)
-  return (await res.json()).token
-}
-
-async function fetchPatch(cfg) {
-  const res = await fetch(`${cfg.api}/api/events/${cfg.eventId}/console-patch`, {
-    headers: { authorization: `Bearer ${cfg.token}` },
-  }).catch(() => null)
-  if (!res) return die(`Cannot reach the API at ${cfg.api}.`)
-  if (res.status === 401) return die('Session expired or invalid — sign in again.')
-  if (res.status === 404) return die('Event not found, or you don’t co-manage it.')
-  if (!res.ok) return die(`Could not load the patch (${res.status}).`)
-  return res.json()
+async function pickEvent(cfg) {
+  if (cfg.eventId) return cfg.eventId
+  const res = await authedGet(cfg, '/api/bridge/events')
+  if (!res.ok) return die(`Could not list events (${res.status}).`)
+  const events = await res.json()
+  if (!events.length) return die('No events found for your account.')
+  if (events.length === 1) {
+    console.log(`\nUsing your only event: ${events[0].eventName}`)
+    return events[0].id
+  }
+  if (!interactive) return die('Multiple events — pass --event <id> in non-interactive mode.')
+  console.log('\nYour events:')
+  events.forEach((e, i) =>
+    console.log(
+      `  ${i + 1}) ${e.eventDate || '—'}  ${e.eventName}${e.venueName ? ` · ${e.venueName}` : ''}`,
+    ),
+  )
+  const idx = Number(await ask(`Choose an event [1-${events.length}]`)) - 1
+  if (!(idx >= 0 && idx < events.length)) return die('Invalid choice.')
+  return events[idx].id
 }
 
 async function loadPatch(cfg) {
@@ -168,23 +235,22 @@ async function loadPatch(cfg) {
       return die(`${cfg.inFile} isn’t valid JSON.`)
     }
   }
-  if (!cfg.eventId) return die('No event id (use --event or run interactively).')
-  if (!cfg.token) {
-    if (!cfg.email || !cfg.password)
-      return die('Provide --token, or --email and --password (or run interactively).')
-    process.stdout.write('Signing in… ')
-    cfg.token = await login(cfg)
-    console.log('ok')
-  }
-  process.stdout.write(`Loading patch for event ${cfg.eventId}… `)
-  const patch = await fetchPatch(cfg)
+  const eventId = await pickEvent(cfg)
+  process.stdout.write(`Loading patch… `)
+  const res = await authedGet(cfg, `/api/bridge/events/${eventId}/patch`)
+  if (res.status === 404) return die('Event not found, or you don’t manage it.')
+  if (!res.ok) return die(`Could not load the patch (${res.status}).`)
   console.log('ok')
-  return patch
+  return res.json()
 }
 
-// ---- main ------------------------------------------------------------------
+// ── main ─────────────────────────────────────────────────────────────────────
 async function main() {
   const cfg = await gather()
+  if (args.reset) {
+    await clearToken(cfg.api)
+    console.log('Forgot the saved token for this API.')
+  }
   if (!cfg.desk && !cfg.dryRun && !cfg.inFile && !interactive)
     return die('Missing --desk <console-ip>. Use --dry-run to preview.')
 
@@ -208,7 +274,7 @@ async function main() {
   const messages = buildMessages(channels)
   if (!messages.length) return die('Nothing to send — build/save a master patch for this event first.')
 
-  if (cfg.dryRun || (!cfg.desk && cfg.inFile)) {
+  if (cfg.dryRun || !cfg.desk) {
     console.log(`\n[dry-run] ${messages.length} OSC messages (not sent):`)
     for (const m of messages)
       console.log(`  ${m.address} ${m.args.map((a) => JSON.stringify(a.value)).join(' ')}`)

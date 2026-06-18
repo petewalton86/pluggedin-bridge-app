@@ -1,0 +1,59 @@
+name: Release binaries
+
+# Build a single-file executable for each OS and attach them to the GitHub
+# Release when you push a version tag (e.g. `git tag v0.2.0 && git push --tags`).
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # needed to upload assets to the Release
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            asset: PluggedInBridge-windows.exe
+            built: PluggedInBridge.exe
+          - os: macos-latest
+            asset: PluggedInBridge-macos
+            built: PluggedInBridge
+          - os: ubuntu-latest
+            asset: PluggedInBridge-linux
+            built: PluggedInBridge
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run package
+
+      # ── Code signing (optional) ─────────────────────────────────────────────
+      # Builds are UNSIGNED until you add the secrets below. Unsigned binaries
+      # run, but Windows SmartScreen / macOS Gatekeeper will warn on download.
+      #
+      # Windows: add secrets WINDOWS_CERT_PFX_BASE64 + WINDOWS_CERT_PASSWORD,
+      #   then sign with signtool (Azure Trusted Signing is the modern option).
+      # macOS:   add MACOS_CERT_P12_BASE64, MACOS_CERT_PASSWORD, APPLE_ID,
+      #   APPLE_TEAM_ID, APPLE_APP_PASSWORD, then codesign --deep + notarytool.
+      # See BUILD.md for the exact steps. Left as a documented TODO so this
+      # workflow ships working (unsigned) binaries today.
+
+      - name: Rename for release
+        shell: bash
+        run: |
+          mv "${{ matrix.built }}" "${{ matrix.asset }}"
+          sha256sum "${{ matrix.asset }}" > "${{ matrix.asset }}.sha256" || \
+            shasum -a 256 "${{ matrix.asset }}" > "${{ matrix.asset }}.sha256"
+
+      - name: Attach to the Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ matrix.asset }}
+            ${{ matrix.asset }}.sha256
