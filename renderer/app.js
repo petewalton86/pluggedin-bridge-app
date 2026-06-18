@@ -3,6 +3,11 @@
 const $ = (id) => document.getElementById(id)
 const B = window.bridge
 
+// Default PluggedIn API. Change this ONE line to the hosted URL once the live
+// app is deployed (e.g. 'https://api.pluggedin.app') and rebuild — users then
+// never see/type it; the Advanced field only overrides it.
+const DEFAULT_API = 'http://localhost:4000'
+
 const COLORS = {
   OFF: '#64748b', RD: '#ef4444', GN: '#22c55e', YE: '#eab308',
   BL: '#3b82f6', MG: '#d946ef', CY: '#06b6d4', WH: '#e5e7eb',
@@ -15,7 +20,7 @@ const store = {
 
 let patch = null // current { eventName, channelCount, channels }
 
-const api = () => $('api').value.trim() || 'http://localhost:4000'
+const api = () => $('api').value.trim() || DEFAULT_API
 
 // Unwrap the { ok, data, error } envelope from the main process.
 async function call(promise) {
@@ -215,7 +220,7 @@ async function loadFile() {
 
 // ── wire up ───────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
-  $('api').value = store.get('pi_api', 'http://localhost:4000')
+  $('api').value = store.get('pi_api', DEFAULT_API)
   $('desk').value = store.get('pi_desk', '')
   $('port').value = store.get('pi_port', '10023')
 

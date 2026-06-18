@@ -1,13 +1,14 @@
 name: Release installers
 
-# Build the desktop app for each OS and attach the installers to the GitHub
-# Release when you push a version tag (e.g. `npm version patch && git push --follow-tags`).
+# Build the desktop app for each OS, then publish them to the GitHub Release in
+# one step. Triggered by pushing a version tag (e.g. `npm version patch && git
+# push --follow-tags`).
 on:
   push:
     tags: ['v*']
 
 permissions:
-  contents: write # upload assets to the Release
+  contents: write # publish the Release
 
 jobs:
   build:
@@ -24,25 +25,33 @@ jobs:
 
       - run: npm ci
 
+      # Builds are UNSIGNED. Do NOT set CSC_LINK / APPLE_* here as empty values —
+      # empty signing vars make electron-builder attempt (and fail) signing on
+      # macOS. When you have certificates, add them as repo secrets and a guarded
+      # env block (see BUILD.md); until then, leave signing off entirely.
       - name: Build installers
         run: npm run dist
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Code signing is OFF until these secrets exist (see BUILD.md):
-          #   Windows/macOS: CSC_LINK + CSC_KEY_PASSWORD
-          #   macOS notarize: APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-      - name: Attach installers to the Release
-        uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
         with:
-          files: |
+          name: installers-${{ matrix.os }}
+          if-no-files-found: ignore
+          path: |
             dist/*.exe
             dist/*.dmg
             dist/*.AppImage
             dist/*.blockmap
-            dist/latest*.yml
+            dist/*.yml
+
+  # Publish once, after all builds — avoids 3 jobs racing to create the Release.
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**

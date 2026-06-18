@@ -1,6 +1,6 @@
 {
   "name": "pluggedin-desk-bridge",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "description": "Desktop app that preloads a Behringer X32 / Midas M32 from a PluggedIn event's master patch over OSC.",
   "license": "MIT",
