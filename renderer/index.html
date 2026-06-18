@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Lock the renderer down: no remote content, no inline-eval beyond our own script. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PluggedIn Desk Bridge</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <img class="logo" src="assets/pluggedin-logo-light.svg" alt="PluggedIn" />
+      <span class="topbar-title">Desk Bridge</span>
+    </header>
+
+    <main id="app">
+      <!-- Pairing screen -->
+      <section id="screen-pair" class="screen">
+        <h1>Connect this device</h1>
+        <p class="muted">
+          In PluggedIn, open a master patch →
+          <strong>Send to desk → Connect a desk bridge</strong>, generate a code,
+          and enter it here. You only do this once.
+        </p>
+        <label class="field">
+          <span>Pairing code</span>
+          <input id="code" type="text" placeholder="XXXX-XXXX" autocomplete="off" spellcheck="false" />
+        </label>
+        <button id="pair-btn" class="btn primary">Pair this device</button>
+
+        <details class="advanced">
+          <summary>Advanced</summary>
+          <label class="field">
+            <span>PluggedIn API URL</span>
+            <input id="api" type="text" placeholder="https://your-pluggedin-host" autocomplete="off" spellcheck="false" />
+          </label>
+        </details>
+        <p id="pair-error" class="error" hidden></p>
+      </section>
+
+      <!-- Main screen -->
+      <section id="screen-main" class="screen" hidden>
+        <div class="row">
+          <label class="field grow">
+            <span>Event</span>
+            <select id="event"></select>
+          </label>
+          <button id="refresh" class="btn ghost" title="Refresh events">↻</button>
+        </div>
+
+        <div class="row">
+          <label class="field grow">
+            <span>Console IP</span>
+            <input id="desk" type="text" placeholder="192.168.0.10" autocomplete="off" spellcheck="false" />
+          </label>
+          <label class="field narrow">
+            <span>Port</span>
+            <input id="port" type="text" value="10023" autocomplete="off" spellcheck="false" />
+          </label>
+        </div>
+
+        <div class="row actions">
+          <button id="preview-btn" class="btn ghost">Preview</button>
+          <button id="push-btn" class="btn primary grow">Push to desk</button>
+        </div>
+
+        <p id="summary" class="muted"></p>
+        <div id="warnings"></div>
+        <div id="channels" class="channels"></div>
+        <p id="status" class="status" hidden></p>
+
+        <footer class="footer">
+          <button id="loadfile" class="link">Load a patch file…</button>
+          <span id="device" class="muted"></span>
+          <button id="forget" class="link danger">Forget this device</button>
+        </footer>
+        <p class="tip">
+          Tip: push before dialling the mix, or use the desk’s recall scope
+          (Config/Preamp) so it only sets names, colours and 48V.
+        </p>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

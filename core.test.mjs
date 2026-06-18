@@ -1,8 +1,17 @@
-// Bridge unit/integration tests. Run: node bridge.test.mjs
+// Headless tests for the bridge core. Run: node core.test.mjs
 import dgram from 'node:dgram'
+import os from 'node:os'
+import path from 'node:path'
+import { mkdtempSync } from 'node:fs'
 import { encode } from './osc.mjs'
-import { buildMessages } from './x32.mjs'
-import { sendMessages } from './udp.mjs'
+
+// Isolate the token store under a temp HOME *before* importing core (it computes
+// the store path from os.homedir() at load time).
+const tmp = mkdtempSync(path.join(os.tmpdir(), 'pgb-'))
+process.env.HOME = tmp
+process.env.USERPROFILE = tmp
+const core = await import('./core.mjs')
+const { buildMessages, sendMessages, normalizeApi } = core
 
 let failed = 0
 const ok = (name, cond) => {
@@ -23,7 +32,7 @@ const oscAddress = (buf) => {
   ok('osc int32 big-endian', c.readInt32BE(c.length - 4) === 3)
 }
 
-// 2. X32 message mapping
+// 2. X32 message mapping (via the core re-export)
 {
   const channels = [
     { ch: 1, name: 'Kick', color: 'YE', source: 1, phantom: false },
@@ -41,7 +50,21 @@ const oscAddress = (buf) => {
   ok('ch2 phantom ON on headamp 001', m[7].address === '/headamp/001/phantom' && m[7].args[0].value === 1)
 }
 
-// 3. UDP delivery to a local listener
+// 3. core token store (isolated temp HOME) + normalizeApi
+{
+  ok('normalizeApi adds scheme', normalizeApi('localhost:4000') === 'http://localhost:4000')
+  ok('normalizeApi strips trailing slash', normalizeApi('http://h/') === 'http://h')
+  await core.storeToken('localhost:4000', 'tok_abc', null, 'FOH')
+  const st = await core.getState('http://localhost:4000/') // variants normalise to one key
+  ok('getState paired after store', st.paired === true && st.label === 'FOH')
+  ok('getStoredToken returns the token', (await core.getStoredToken('localhost:4000')) === 'tok_abc')
+  await core.clearToken('localhost:4000')
+  ok('clearToken forgets it', (await core.getStoredToken('localhost:4000')) === null)
+  await core.storeToken('h', 'old', new Date(Date.now() - 1000).toISOString(), 'x')
+  ok('expired token is ignored', (await core.getStoredToken('h')) === null)
+}
+
+// 4. UDP delivery to a local listener (via the core re-export)
 await new Promise((resolve) => {
   const server = dgram.createSocket('udp4')
   const got = []

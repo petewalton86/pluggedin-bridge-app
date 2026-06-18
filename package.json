@@ -1,25 +1,24 @@
 {
   "name": "pluggedin-desk-bridge",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
-  "description": "Push a PluggedIn event's master patch to a Behringer X32 / Midas M32 live over OSC.",
+  "description": "Desktop app that preloads a Behringer X32 / Midas M32 from a PluggedIn event's master patch over OSC.",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/petewalton86/pluggedin-bridge-app.git"
   },
-  "type": "module",
-  "bin": { "pluggedin-bridge": "./bridge.mjs" },
+  "main": "electron/main.cjs",
   "scripts": {
-    "start": "node bridge.mjs",
-    "test": "node bridge.test.mjs",
-    "bundle": "esbuild bridge.mjs --bundle --platform=node --format=cjs --outfile=dist/bridge.cjs",
-    "blob": "node --experimental-sea-config sea-config.json",
-    "package": "npm run bundle && npm run blob && node scripts/make-exe.mjs"
+    "start": "electron .",
+    "dev": "electron .",
+    "test": "node core.test.mjs",
+    "dist": "electron-builder",
+    "dist:dir": "electron-builder --dir"
   },
   "devDependencies": {
-    "esbuild": "^0.21.5",
-    "postject": "^1.0.0-alpha.6"
+    "electron": "^31.7.6",
+    "electron-builder": "^25.1.8"
   },
   "engines": { "node": ">=20" }
 }
