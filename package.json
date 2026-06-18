@@ -1,0 +1,25 @@
+{
+  "name": "pluggedin-desk-bridge",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Push a PluggedIn event's master patch to a Behringer X32 / Midas M32 live over OSC.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/petewalton86/pluggedin-bridge-app.git"
+  },
+  "type": "module",
+  "bin": { "pluggedin-bridge": "./bridge.mjs" },
+  "scripts": {
+    "start": "node bridge.mjs",
+    "test": "node bridge.test.mjs",
+    "bundle": "esbuild bridge.mjs --bundle --platform=node --format=cjs --outfile=dist/bridge.cjs",
+    "blob": "node --experimental-sea-config sea-config.json",
+    "package": "npm run bundle && npm run blob && node scripts/make-exe.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.5",
+    "postject": "^1.0.0-alpha.6"
+  },
+  "engines": { "node": ">=20" }
+}
