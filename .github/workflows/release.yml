@@ -29,8 +29,12 @@ jobs:
       # empty signing vars make electron-builder attempt (and fail) signing on
       # macOS. When you have certificates, add them as repo secrets and a guarded
       # env block (see BUILD.md); until then, leave signing off entirely.
+      #
+      # --publish never: on a tag push electron-builder otherwise defaults to
+      # `--publish onTagOrDraft` and tries to upload to GitHub, which fails for
+      # lack of a GH_TOKEN. Publishing is done once by the `release` job below.
       - name: Build installers
-        run: npm run dist
+        run: npm run dist -- --publish never
 
       - uses: actions/upload-artifact@v4
         with:
