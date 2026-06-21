@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld('bridge', {
   forget: (api) => invoke('forget', api),
   events: (api) => invoke('events', api),
   patch: (api, eventId) => invoke('patch', api, eventId),
-  preview: (channels) => invoke('preview', channels),
+  preview: (channels, opts) => invoke('preview', channels, opts),
   push: (channels, opts) => invoke('push', channels, opts),
   patchFile: () => invoke('patch-file'),
   openExternal: (url) => invoke('open-external', url),

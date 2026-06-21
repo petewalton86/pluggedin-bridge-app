@@ -7,12 +7,32 @@ import os from 'node:os'
 import path from 'node:path'
 import { readFile, writeFile } from 'node:fs/promises'
 import { buildMessages } from './x32.mjs'
+import { buildMessages as buildXAir } from './xair.mjs'
+import { buildMessages as buildYamaha } from './yamaha.mjs'
+import { buildMessages as buildAh } from './ah.mjs'
 import { sendMessages } from './udp.mjs'
+import { sendFrames } from './tcp.mjs'
 
 export { buildMessages, sendMessages }
 
-/** Build OSC messages for a channel list (sync). */
-export const messagesFor = (channels) => buildMessages(channels)
+// Console driver registry. OSC drivers (udp) emit [{address,args}]; TCP drivers
+// emit raw frames (strings / Buffers). `port` is the per-console default.
+const DRIVERS = {
+  x32: { transport: 'udp', port: 10023, build: buildMessages },
+  xair: { transport: 'udp', port: 10024, build: buildXAir },
+  'yamaha-clql': { transport: 'tcp', port: 49280, build: buildYamaha },
+  'yamaha-rivage': { transport: 'tcp', port: 49280, build: buildYamaha },
+  'ah-sq': { transport: 'tcp', port: 51325, build: (ch) => buildAh(ch, 'sq') },
+  'ah-dlive': { transport: 'tcp', port: 51325, build: (ch) => buildAh(ch, 'dlive') },
+}
+
+/** The driver for a console id (defaults to X32). */
+export const driverFor = (console) => DRIVERS[console] || DRIVERS.x32
+/** Default network port for a console id. */
+export const defaultPort = (console) => driverFor(console).port
+
+/** Build the messages/frames for a channel list + console (sync). */
+export const messagesFor = (channels, { console } = {}) => driverFor(console).build(channels)
 
 /** Accept "localhost:4000"/"host" without a scheme — default to http://. */
 export function normalizeApi(u) {
@@ -134,11 +154,18 @@ export async function loadPatchFile(file) {
   }
 }
 
-/** Send the patch's channels to the desk over OSC. Returns the message count. */
-export async function push(channels, { desk, port = 10023, pace = 25 } = {}) {
+/**
+ * Send the patch's channels to the chosen console. OSC desks (X32/X-Air) go over
+ * UDP; Yamaha (SCP) and Allen & Heath (MIDI) go over TCP. Returns the count sent.
+ */
+export async function push(channels, { desk, port, pace = 25, console } = {}) {
   if (!desk) throw err('No console IP.', 'no_desk')
-  const messages = buildMessages(channels)
-  if (!messages.length) throw err('Nothing to send — this patch has no channels.', 'empty')
-  await sendMessages(messages, desk, Number(port) || 10023, { pace: Number(pace) || 25 })
-  return messages.length
+  const drv = driverFor(console)
+  const p = Number(port) || drv.port
+  const pc = Number(pace) || 25
+  const frames = drv.build(channels)
+  if (!frames.length) throw err('Nothing to send — this patch has no channels.', 'empty')
+  if (drv.transport === 'tcp') await sendFrames(frames, desk, p, { pace: pc })
+  else await sendMessages(frames, desk, p, { pace: pc })
+  return frames.length
 }

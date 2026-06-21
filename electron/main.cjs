@@ -50,7 +50,7 @@ if (!app.requestSingleInstanceLock()) {
     handle('forget', (core, api) => core.clearToken(api))
     handle('events', (core, api) => core.listEvents(api))
     handle('patch', (core, api, eventId) => core.loadPatch(api, eventId))
-    handle('preview', (core, channels) => core.messagesFor(channels))
+    handle('preview', (core, channels, opts) => core.messagesFor(channels, opts))
     handle('push', (core, channels, opts) => core.push(channels, opts))
     handle('patch-file', async (core) => {
       const r = await dialog.showOpenDialog({

@@ -1,12 +1,20 @@
 # PluggedIn Desk Bridge
 
-A small **desktop app** that preloads a **Behringer X32 / Midas M32** from an
-event's **master patch** — the right channel **names, colours, input sources and
-48V phantom**, in order, straight from PluggedIn.
+A small **desktop app** that preloads a **mixing console** from an event's
+**master patch** — the right channel **names, colours, input sources and 48V
+phantom**, in order, straight from PluggedIn. Pick your **console** in the app
+(it remembers it, and pre-selects from your venue's saved desk).
 
-A browser can't talk to a console (consoles listen on UDP/OSC), so this app runs
-on the **FOH laptop**, on the **same network as the desk**, and sends the OSC
-itself. No terminal required.
+A browser can't talk to a console (they listen on the local network — OSC/UDP or
+TCP), so this app runs on the **FOH laptop**, on the **same network as the desk**,
+and speaks the protocol itself. No terminal required.
+
+**Live push:** Behringer **X32 / M32** (confirmed) · Behringer **X-Air / M-Air** ·
+Yamaha **CL / QL** (and Rivage/DM) · Allen & Heath **SQ** and **dLive / Avantis**.
+Everything except X32/M32 is **beta** — built to each maker's published protocol
+but not yet bench-verified, so check names/colours land before doors. Any other
+desk: use **Send to desk → Download for my desk** in the web app for a scene /
+console-aware CSV / print sheet.
 
 ![PluggedIn](renderer/assets/pluggedin-logo-light.svg)
 
@@ -63,7 +71,30 @@ process** (`electron/main.cjs`) runs all logic via `core.mjs` (pairing, fetch,
 OSC over UDP); the sandboxed renderer (`renderer/`) talks to it only through the
 `preload.cjs` bridge.
 
+## Console support
+
+**Live network push (this app)** — pick the console in the app:
+
+| Console | Transport | Port | Status |
+| --- | --- | --- | --- |
+| Behringer X32 / Midas M32 | OSC / UDP | 10023 | Confirmed |
+| Behringer X-Air / Midas M-Air | OSC / UDP | 10024 | Beta |
+| Yamaha CL / QL (Rivage PM, DM) | SCP / TCP | 49280 | Beta |
+| Allen & Heath SQ | MIDI / TCP | 51325 | Beta |
+| Allen & Heath dLive / Avantis | MIDI / TCP | 51325 | Beta |
+
+Beta drivers (`xair.mjs`, `yamaha.mjs`, `ah.mjs`) are built to each maker's
+published protocol but **not bench-verified** — confirm names/colours land, and
+the per-console command/byte templates are centralised for quick fixes.
+
+**Offline file export (any desk):** in the web app, **Send to desk → Download for my desk** picks
+the best artifact for the chosen console — a native **scene** for X32/M32 (and best‑effort
+X‑Air), or a **console‑aware CSV** (names pre‑clipped to that desk's scribble‑strip budget) plus a
+branded **print patch sheet (PDF)** for everything else. We only ever set **name · colour · input
+patch · 48V** — never gains/EQ/mix — so it's safe on any console. Proprietary/binary session files
+(Yamaha, Allen & Heath, DiGiCo, PreSonus, Avid) aren't authored; those desks use the CSV / sheet.
+
 ## Roadmap
-- Verify the OSC parameter set against an X32/M32 (and X‑Air) on the bench.
+- Bench-verify the beta drivers (X-Air, Yamaha SCP, A&H SysEx) on real hardware.
 - Code signing + notarization for warning-free downloads.
-- Additional OSC desks (Behringer/Midas Wing, DiGiCo SD/Quantum).
+- More OSC live push: Behringer/Midas Wing, DiGiCo SD/Quantum.

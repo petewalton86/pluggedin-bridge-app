@@ -97,5 +97,72 @@ await new Promise((resolve) => {
   })
 })
 
+// 5. Multi-console drivers via messagesFor(channels, { console })
+{
+  const ch = [
+    { ch: 1, name: 'Kick', color: 'YE', source: 1, phantom: false },
+    { ch: 2, name: 'Lead Vocal long', color: 'RD', source: 2, phantom: true },
+    { ch: 17, name: 'Beyond', color: 'WH', phantom: false }, // > X-Air 16ch
+    { ch: 3, name: 'Skip', color: 'WH', overflow: true },
+  ]
+
+  // X-Air (OSC, port 10024): name/colour/phantom, 2-digit head amp, caps at 16.
+  ok('defaultPort xair = 10024', core.defaultPort('xair') === 10024)
+  const xa = core.messagesFor(ch, { console: 'xair' })
+  ok('xair: 2 channels × 3 msgs (overflow + >16 skipped)', xa.length === 6)
+  ok('xair ch1 name', xa[0].address === '/ch/01/config/name' && xa[0].args[0].value === 'Kick')
+  ok('xair ch2 phantom on headamp 01', xa[5].address === '/headamp/01/phantom' && xa[5].args[0].value === 1)
+
+  // Yamaha SCP (TCP 49280): ASCII set-lines, 0-indexed channel.
+  ok('defaultPort yamaha = 49280', core.defaultPort('yamaha-clql') === 49280)
+  const ym = core.messagesFor(ch, { console: 'yamaha-clql' })
+  ok('yamaha: 3 lines × 3 channels', ym.length === 9)
+  ok('yamaha name line (0-indexed)', ym[0] === 'set MIXER:Current/InCh/Label/Name 0 0 "Kick"\n')
+  ok('yamaha colour name', ym[1] === 'set MIXER:Current/InCh/Label/Color 0 0 "Yellow"\n')
+  ok('yamaha 48V on', ym[5] === 'set MIXER:Current/InCh/HA/48V 1 0 1\n')
+
+  // Allen & Heath SQ (TCP 51325): one name SysEx per channel, F0…F7.
+  ok('defaultPort ah-sq = 51325', core.defaultPort('ah-sq') === 51325)
+  const ah = core.messagesFor(ch, { console: 'ah-sq' })
+  ok('ah-sq: one frame per non-overflow channel (incl ch17)', ah.length === 3)
+  ok('ah-sq frame is SysEx', ah[0][0] === 0xf0 && ah[0][ah[0].length - 1] === 0xf7)
+  ok('ah-sq A&H mfr id 00 00 1A', ah[0][1] === 0x00 && ah[0][2] === 0x00 && ah[0][3] === 0x1a)
+  ok('ah-sq carries the channel byte + name', ah[0].includes(0x00) && ah[0].includes('K'.charCodeAt(0)))
+
+  ok('unknown console falls back to x32', core.driverFor('nope') === core.driverFor('x32'))
+}
+
+// 6. TCP transport delivers frames to a local listener
+await new Promise((resolve) => {
+  import('./tcp.mjs').then(async ({ sendFrames }) => {
+    const net = await import('node:net')
+    const got = []
+    const server = net.createServer((sock) => {
+      sock.on('data', (d) => got.push(d))
+    })
+    const timer = setTimeout(() => {
+      ok('TCP: delivered within timeout', false)
+      try {
+        server.close()
+      } catch {
+        /* noop */
+      }
+      resolve()
+    }, 3000)
+    server.listen(0, '127.0.0.1', async () => {
+      const { port } = server.address()
+      const frames = ['set A 0 0 "x"\n', Buffer.from([0xf0, 0x01, 0xf7])]
+      const n = await sendFrames(frames, '127.0.0.1', port, { pace: 1 })
+      clearTimeout(timer)
+      const all = Buffer.concat(got).toString('binary')
+      ok('TCP: sendFrames reports 2 frames', n === 2)
+      ok('TCP: ascii frame delivered', all.includes('set A 0 0 "x"'))
+      ok('TCP: byte frame delivered (F0…F7)', got.length > 0 && all.includes('\xf0'))
+      server.close()
+      resolve()
+    })
+  })
+})
+
 console.log(failed ? `\n\x1b[31m${failed} failed\x1b[0m` : '\n\x1b[32mALL PASS\x1b[0m')
 process.exit(failed ? 1 : 0)

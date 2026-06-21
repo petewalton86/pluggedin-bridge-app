@@ -13,6 +13,21 @@ const COLORS = {
   BL: '#3b82f6', MG: '#d946ef', CY: '#06b6d4', WH: '#e5e7eb',
 }
 
+// Consoles the bridge can push to live, with their default network port. Desks
+// other than the X32/M32 are beta (verify on your hardware). Must match the
+// driver ids in core.mjs.
+const CONSOLES = [
+  { id: 'x32', label: 'Behringer X32 / Midas M32', port: 10023, beta: false },
+  { id: 'xair', label: 'Behringer X-Air / Midas M-Air', port: 10024, beta: true },
+  { id: 'yamaha-clql', label: 'Yamaha CL / QL', port: 49280, beta: true },
+  { id: 'yamaha-rivage', label: 'Yamaha Rivage PM / DM', port: 49280, beta: true },
+  { id: 'ah-sq', label: 'Allen & Heath SQ', port: 51325, beta: true },
+  { id: 'ah-dlive', label: 'Allen & Heath dLive / Avantis', port: 51325, beta: true },
+]
+const consoleInfo = (id) => CONSOLES.find((c) => c.id === id) || CONSOLES[0]
+const consoleSel = () => $('console').value || 'x32'
+let consoleTouched = false // user picked manually → don't auto-override from the patch
+
 const store = {
   get: (k, d) => localStorage.getItem(k) ?? d,
   set: (k, v) => localStorage.setItem(k, v),
@@ -128,6 +143,7 @@ async function loadPatch(eventId) {
   status('Loading patch…', 'busy')
   try {
     patch = await call(B.patch(api(), eventId))
+    applySuggestedConsole(patch)
     renderPatch()
     status('')
   } catch (e) {
@@ -175,12 +191,41 @@ function warnEl(text) {
   return d
 }
 
+// ── console selection ─────────────────────────────────────────────────────────
+function updateConsoleUi() {
+  const info = consoleInfo(consoleSel())
+  $('console-note').textContent = info.beta
+    ? 'Beta — built from the published protocol; verify names/colours on your desk.'
+    : ''
+  $('console-note').hidden = !info.beta
+}
+
+function onConsoleChange() {
+  consoleTouched = true
+  const info = consoleInfo(consoleSel())
+  $('port').value = String(info.port) // default port for this desk (still editable)
+  store.set('pi_console', info.id)
+  store.set('pi_port', $('port').value)
+  updateConsoleUi()
+}
+
+// Pre-select the venue's saved desk (best-effort) unless the user already chose.
+function applySuggestedConsole(p) {
+  const id = p?.suggestedConsole
+  if (!id || consoleTouched || !CONSOLES.some((c) => c.id === id)) return
+  if ($('console').value === id) return
+  $('console').value = id
+  $('port').value = String(consoleInfo(id).port)
+  store.set('pi_port', $('port').value)
+  updateConsoleUi()
+}
+
 // ── preview + push ───────────────────────────────────────────────────────────
 async function preview() {
   if (!patch?.channels?.length) return status('Nothing to preview yet.', 'err')
   try {
-    const msgs = await call(B.preview(patch.channels))
-    status(`Preview: ${msgs.length} OSC messages (not sent).`, 'busy')
+    const msgs = await call(B.preview(patch.channels, { console: consoleSel() }))
+    status(`Preview: ${msgs.length} message(s) ready (not sent).`, 'busy')
   } catch (e) {
     status(e.message, 'err')
   }
@@ -190,14 +235,15 @@ async function push() {
   if (!patch?.channels?.length) return status('Load an event or patch file first.', 'err')
   const desk = $('desk').value.trim()
   if (!desk) return status('Enter the console IP first.', 'err')
-  const port = $('port').value.trim() || '10023'
+  const console = consoleSel()
+  const port = $('port').value.trim() || String(consoleInfo(console).port)
   store.set('pi_desk', desk)
   store.set('pi_port', port)
   $('push-btn').disabled = true
-  status(`Pushing to ${desk}:${port}…`, 'busy')
+  status(`Pushing to ${consoleInfo(console).label} at ${desk}:${port}…`, 'busy')
   try {
-    const n = await call(B.push(patch.channels, { desk, port, pace: 25 }))
-    status(`Pushed ${n} OSC messages ✓`, 'ok')
+    const n = await call(B.push(patch.channels, { desk, port, pace: 25, console }))
+    status(`Pushed ${n} message(s) ✓`, 'ok')
   } catch (e) {
     status(e.message, 'err')
   } finally {
@@ -222,12 +268,24 @@ async function loadFile() {
 window.addEventListener('DOMContentLoaded', () => {
   $('api').value = store.get('pi_api', DEFAULT_API)
   $('desk').value = store.get('pi_desk', '')
-  $('port').value = store.get('pi_port', '10023')
+
+  // Populate the console picker + restore the last choice.
+  const sel = $('console')
+  for (const c of CONSOLES) {
+    const opt = document.createElement('option')
+    opt.value = c.id
+    opt.textContent = c.label + (c.beta ? ' (beta)' : '')
+    sel.appendChild(opt)
+  }
+  sel.value = store.get('pi_console', 'x32')
+  $('port').value = store.get('pi_port', String(consoleInfo(sel.value).port))
+  updateConsoleUi()
 
   $('pair-btn').addEventListener('click', doPair)
   $('code').addEventListener('keydown', (e) => e.key === 'Enter' && doPair())
   $('refresh').addEventListener('click', loadEvents)
   $('event').addEventListener('change', (e) => loadPatch(e.target.value))
+  $('console').addEventListener('change', onConsoleChange)
   $('preview-btn').addEventListener('click', preview)
   $('push-btn').addEventListener('click', push)
   $('loadfile').addEventListener('click', loadFile)
