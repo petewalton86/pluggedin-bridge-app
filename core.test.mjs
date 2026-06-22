@@ -164,5 +164,28 @@ await new Promise((resolve) => {
   })
 })
 
+// 7. loadPatch URL building: consolidated vs per-band (slice/standalone)
+{
+  await core.storeToken('http://api.test', 'tok_lp', null, 'FOH')
+  const realFetch = global.fetch
+  let lastUrl = ''
+  global.fetch = async (url) => {
+    lastUrl = String(url)
+    return { ok: true, status: 200, json: async () => ({ channels: [], lineup: [] }) }
+  }
+  try {
+    await core.loadPatch('http://api.test', 'ev1')
+    ok('loadPatch (master) → no query params', lastUrl === 'http://api.test/api/bridge/events/ev1/patch')
+    await core.loadPatch('http://api.test', 'ev1', { requestId: 'b2', mode: 'standalone' })
+    ok(
+      'loadPatch (per-band) → requestId + mode in query',
+      lastUrl === 'http://api.test/api/bridge/events/ev1/patch?requestId=b2&mode=standalone',
+    )
+  } finally {
+    global.fetch = realFetch
+    await core.clearToken('http://api.test')
+  }
+}
+
 console.log(failed ? `\n\x1b[31m${failed} failed\x1b[0m` : '\n\x1b[32mALL PASS\x1b[0m')
 process.exit(failed ? 1 : 0)

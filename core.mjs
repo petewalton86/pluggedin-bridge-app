@@ -131,9 +131,15 @@ export async function listEvents(api) {
   return res.json()
 }
 
-/** Resolved console patch for an event: { eventName, channelCount, channels }. */
-export async function loadPatch(api, eventId) {
-  const res = await authedGet(api, `/api/bridge/events/${eventId}/patch`)
+/**
+ * Resolved console patch for an event: { eventName, channelCount, channels,
+ * lineup:[{id,name}], ... }. Pass { requestId } to load a single band's patch
+ * (mode 'slice' = on its master-patch channels [default]; 'standalone' = a fresh
+ * 1..N scene) for re-patching between sets; omit it for the consolidated master.
+ */
+export async function loadPatch(api, eventId, { requestId = null, mode = 'slice' } = {}) {
+  const qs = requestId ? `?requestId=${encodeURIComponent(requestId)}&mode=${encodeURIComponent(mode)}` : ''
+  const res = await authedGet(api, `/api/bridge/events/${eventId}/patch${qs}`)
   if (res.status === 404) throw err('Event not found, or you don’t manage it.', 'not_found')
   if (!res.ok) throw err(`Could not load the patch (${res.status}).`)
   return res.json()

@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld('bridge', {
   pair: (api, code, label) => invoke('pair', api, code, label),
   forget: (api) => invoke('forget', api),
   events: (api) => invoke('events', api),
-  patch: (api, eventId) => invoke('patch', api, eventId),
+  patch: (api, eventId, opts) => invoke('patch', api, eventId, opts),
   preview: (channels, opts) => invoke('preview', channels, opts),
   push: (channels, opts) => invoke('push', channels, opts),
   patchFile: () => invoke('patch-file'),

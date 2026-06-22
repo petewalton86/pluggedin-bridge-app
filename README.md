@@ -40,7 +40,10 @@ Download the latest build for your OS from
    token (it can only read your events' console patches — never your password)
    and remembers this device. Revoke it any time from the same dialog.
 2. **Pick the event** from the dropdown.
-3. **Enter the console IP** (Setup → Network on the desk) and click **Push to
+3. **Choose the patch** (optional): the **Master patch (all bands)** by default, or a
+   single band to load between sets — either on its **master channels** (re-label per
+   act) or as a **standalone scene (ch 1–N)**.
+4. **Enter the console IP** (Setup → Network on the desk) and click **Push to
    desk**. Use **Preview** to see the channel list / OSC without sending.
 
 **Offline?** In the web app use **Send to desk → Patch data (.json)**, copy the

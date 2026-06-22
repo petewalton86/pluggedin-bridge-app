@@ -33,7 +33,8 @@ const store = {
   set: (k, v) => localStorage.setItem(k, v),
 }
 
-let patch = null // current { eventName, channelCount, channels }
+let patch = null // current { eventName, channelCount, channels, lineup }
+let currentEventId = null // event whose patch is loaded (for band/layout re-fetch)
 
 const api = () => $('api').value.trim() || DEFAULT_API
 
@@ -138,11 +139,16 @@ async function loadEvents() {
   }
 }
 
-async function loadPatch(eventId) {
+const bandSel = () => $('band')?.value || '' // '' = Master (all bands)
+const layoutSel = () => $('layout')?.value || 'slice'
+
+async function loadPatch(eventId, opts = {}) {
   if (!eventId) return
+  currentEventId = eventId
   status('Loading patch…', 'busy')
   try {
-    patch = await call(B.patch(api(), eventId))
+    patch = await call(B.patch(api(), eventId, opts))
+    if (!opts.requestId) populateBands(patch.lineup) // refresh the band list on a Master load
     applySuggestedConsole(patch)
     renderPatch()
     status('')
@@ -150,6 +156,35 @@ async function loadPatch(eventId) {
     if (e.code === 'unpaired') return show('pair')
     status(e.message, 'err')
   }
+}
+
+/** Fill the Patch dropdown (Master + each band) from the patch response's lineup. */
+function populateBands(lineup) {
+  const sel = $('band')
+  if (!sel) return
+  sel.innerHTML = '<option value="">Master patch (all bands)</option>'
+  for (const b of lineup || []) {
+    const o = document.createElement('option')
+    o.value = b.id
+    o.textContent = b.name
+    sel.appendChild(o)
+  }
+  sel.value = '' // a fresh event starts on the consolidated master patch
+  updateBandUi()
+}
+
+/** Show the Layout toggle only when a single band is selected. */
+function updateBandUi() {
+  const row = $('layout-row')
+  if (row) row.hidden = !bandSel()
+}
+
+/** Re-fetch after a Patch/Layout change: Master, or one band's slice/standalone. */
+function reloadPatch() {
+  if (!currentEventId) return
+  updateBandUi()
+  const band = bandSel()
+  loadPatch(currentEventId, band ? { requestId: band, mode: layoutSel() } : {})
 }
 
 function renderPatch() {
@@ -285,6 +320,8 @@ window.addEventListener('DOMContentLoaded', () => {
   $('code').addEventListener('keydown', (e) => e.key === 'Enter' && doPair())
   $('refresh').addEventListener('click', loadEvents)
   $('event').addEventListener('change', (e) => loadPatch(e.target.value))
+  $('band').addEventListener('change', reloadPatch)
+  $('layout').addEventListener('change', reloadPatch)
   $('console').addEventListener('change', onConsoleChange)
   $('preview-btn').addEventListener('click', preview)
   $('push-btn').addEventListener('click', push)

@@ -49,7 +49,7 @@ if (!app.requestSingleInstanceLock()) {
     handle('pair', (core, api, code, label) => core.pair(api, code, label))
     handle('forget', (core, api) => core.clearToken(api))
     handle('events', (core, api) => core.listEvents(api))
-    handle('patch', (core, api, eventId) => core.loadPatch(api, eventId))
+    handle('patch', (core, api, eventId, opts) => core.loadPatch(api, eventId, opts))
     handle('preview', (core, channels, opts) => core.messagesFor(channels, opts))
     handle('push', (core, channels, opts) => core.push(channels, opts))
     handle('patch-file', async (core) => {

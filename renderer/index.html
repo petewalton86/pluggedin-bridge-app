@@ -54,6 +54,22 @@
 
         <div class="row">
           <label class="field grow">
+            <span>Patch</span>
+            <select id="band"></select>
+          </label>
+        </div>
+        <div class="row" id="layout-row" hidden>
+          <label class="field grow">
+            <span>Layout</span>
+            <select id="layout">
+              <option value="slice">Master channels (re-label between sets)</option>
+              <option value="standalone">Standalone scene (ch 1–N)</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="row">
+          <label class="field grow">
             <span>Console</span>
             <select id="console"></select>
           </label>
