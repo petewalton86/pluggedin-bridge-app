@@ -13,5 +13,6 @@ contextBridge.exposeInMainWorld('bridge', {
   preview: (channels, opts) => invoke('preview', channels, opts),
   push: (channels, opts) => invoke('push', channels, opts),
   patchFile: () => invoke('patch-file'),
+  exportAhCsv: (channels, suggestedName) => invoke('export-ah-csv', channels, suggestedName),
   openExternal: (url) => invoke('open-external', url),
 })

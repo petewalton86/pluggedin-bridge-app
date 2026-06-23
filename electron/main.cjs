@@ -3,6 +3,7 @@
 // The renderer is sandboxed and talks to us only through the preload bridge.
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron')
 const path = require('node:path')
+const { writeFile } = require('node:fs/promises')
 const { pathToFileURL } = require('node:url')
 
 let corePromise
@@ -59,6 +60,17 @@ if (!app.requestSingleInstanceLock()) {
       })
       if (r.canceled || !r.filePaths[0]) return null
       return core.loadPatchFile(r.filePaths[0])
+    })
+    // Save an Allen & Heath dLive/Avantis "Show CSV" to import on the desk.
+    handle('export-ah-csv', async (core, channels, suggestedName) => {
+      const base = String(suggestedName || 'patch').replace(/[^\w-]+/g, '_').slice(0, 40)
+      const r = await dialog.showSaveDialog({
+        defaultPath: `${base}-dlive.csv`,
+        filters: [{ name: 'A&H Director CSV', extensions: ['csv'] }],
+      })
+      if (r.canceled || !r.filePath) return null
+      await writeFile(r.filePath, core.buildAhCsv(channels), 'utf8')
+      return r.filePath
     })
     handle('open-external', async (_core, url) => {
       if (/^https?:\/\//i.test(url)) await shell.openExternal(url)

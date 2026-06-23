@@ -10,10 +10,11 @@ import { buildMessages } from './x32.mjs'
 import { buildMessages as buildXAir } from './xair.mjs'
 import { buildMessages as buildYamaha } from './yamaha.mjs'
 import { buildMessages as buildAh } from './ah.mjs'
+import { buildAhCsv } from './ahcsv.mjs'
 import { sendMessages } from './udp.mjs'
 import { sendFrames } from './tcp.mjs'
 
-export { buildMessages, sendMessages }
+export { buildMessages, sendMessages, buildAhCsv }
 
 // Console driver registry. OSC drivers (udp) emit [{address,args}]; TCP drivers
 // emit raw frames (strings / Buffers). `port` is the per-console default.

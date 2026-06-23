@@ -132,6 +132,36 @@ await new Promise((resolve) => {
   ok('unknown console falls back to x32', core.driverFor('nope') === core.driverFor('x32'))
 }
 
+// 5b. Allen & Heath dLive/Avantis "Show CSV" export (Import on the desk)
+{
+  const csv = core.buildAhCsv([
+    { ch: 1, name: 'Kick', color: 'RD', phantom: false },
+    { ch: 4, name: 'OH L', color: 'CY', phantom: true },
+  ])
+  const lines = csv.trim().split('\r\n')
+  const find = (p) => lines.find((l) => l.startsWith(p)) || ''
+  ok('ah-csv [Version] header', lines[0].startsWith('[Version],V1.0'))
+  ok('ah-csv [Channels] header', lines[1].startsWith('[Channels]'))
+  ok('ah-csv input name + colour + socket', find('Input,1,').includes('"Kick",Red,MixRack,1'))
+  ok('ah-csv 48V On for phantom ch4', /^Input,4,"OH L",Cyan,MixRack,4,,27,Off,On,/.test(find('Input,4,')))
+  ok('ah-csv 48V Off for non-phantom ch1', /,27,Off,Off,/.test(find('Input,1,')))
+  ok('ah-csv unset input keeps its number as name', find('Input,9,').includes('"9",Green'))
+  ok('ah-csv emits 128 Input rows', lines.filter((l) => l.startsWith('Input,')).length === 128)
+  ok('ah-csv has Outputs + Virtual SoundCheck', !!find('[Outputs]') && !!find('[Virtual SoundCheck]'))
+  ok('ah-csv every row is 28 columns', lines.every((l) => l.split(',').length === 28))
+
+  // Non-ASCII / control chars must be stripped (A&H parser is strict ASCII).
+  const dirty = core.buildAhCsv([
+    { ch: 1, name: 'Vox “L”—é', color: 'RD', phantom: false }, // smart quotes, em-dash, accent
+    { ch: 2, name: 'Drum\r\nHit', color: 'GN', phantom: false }, // embedded CR/LF
+  ]).split('\r\n')
+  const dfind = (p) => dirty.find((l) => l.startsWith(p)) || ''
+  ok('ah-csv strips non-ASCII from names', dfind('Input,1,').includes('"Vox L"'))
+  ok('ah-csv strips embedded newline (no row desync)', dfind('Input,2,').includes('"DrumHit"'))
+  ok('ah-csv still 128 Input rows with dirty names', dirty.filter((l) => l.startsWith('Input,')).length === 128)
+  ok('ah-csv dirty rows still 28 cols', dirty.filter((l) => l.startsWith('Input,')).every((l) => l.split(',').length === 28))
+}
+
 // 6. TCP transport delivers frames to a local listener
 await new Promise((resolve) => {
   import('./tcp.mjs').then(async ({ sendFrames }) => {

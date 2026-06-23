@@ -233,6 +233,8 @@ function updateConsoleUi() {
     ? 'Beta — built from the published protocol; verify names/colours on your desk.'
     : ''
   $('console-note').hidden = !info.beta
+  // A&H dLive/Avantis: offer the reliable Show-CSV download (Import on the desk).
+  $('download-csv-btn').hidden = info.id !== 'ah-dlive'
 }
 
 function onConsoleChange() {
@@ -286,6 +288,17 @@ async function push() {
   }
 }
 
+async function downloadCsv() {
+  if (!patch?.channels?.length) return status('Load an event or patch file first.', 'err')
+  try {
+    const file = await call(B.exportAhCsv(patch.channels, patch.eventName))
+    if (!file) return
+    status(`Saved Show CSV → ${file}. Import it on the desk (or in Director).`, 'ok')
+  } catch (e) {
+    status(e.message, 'err')
+  }
+}
+
 async function loadFile() {
   try {
     const p = await call(B.patchFile())
@@ -325,6 +338,7 @@ window.addEventListener('DOMContentLoaded', () => {
   $('console').addEventListener('change', onConsoleChange)
   $('preview-btn').addEventListener('click', preview)
   $('push-btn').addEventListener('click', push)
+  $('download-csv-btn').addEventListener('click', downloadCsv)
   $('loadfile').addEventListener('click', loadFile)
   $('forget').addEventListener('click', forget)
 
