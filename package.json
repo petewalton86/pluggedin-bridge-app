@@ -1,8 +1,8 @@
 {
   "name": "pluggedin-desk-bridge",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "private": true,
-  "description": "Desktop app that preloads a mixing console (Behringer X32/M32 + X-Air, Yamaha CL/QL, Allen & Heath SQ/dLive — beta) from a PluggedIn event's master patch over the network.",
+  "description": "Desktop app that live-pushes a mixing console (Behringer X32/M32 + X-Air, OSC) from a PluggedIn event's master patch over the network. Other desks load via file downloads on the PluggedIn event page.",
   "license": "MIT",
   "repository": {
     "type": "git",
