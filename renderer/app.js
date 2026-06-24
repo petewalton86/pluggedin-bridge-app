@@ -13,16 +13,13 @@ const COLORS = {
   BL: '#3b82f6', MG: '#d946ef', CY: '#06b6d4', WH: '#e5e7eb',
 }
 
-// Consoles the bridge can push to live, with their default network port. Desks
-// other than the X32/M32 are beta (verify on your hardware). Must match the
-// driver ids in core.mjs.
+// Consoles the bridge can push to LIVE, with their default network port. Only
+// desks proven to accept a live push are listed (OSC). Other desks (Yamaha,
+// Allen & Heath, …) are loaded from the file downloads on the venue event page,
+// not pushed from here. Must match the driver ids in core.mjs.
 const CONSOLES = [
   { id: 'x32', label: 'Behringer X32 / Midas M32', port: 10023, beta: false },
   { id: 'xair', label: 'Behringer X-Air / Midas M-Air', port: 10024, beta: true },
-  { id: 'yamaha-clql', label: 'Yamaha CL / QL', port: 49280, beta: true },
-  { id: 'yamaha-rivage', label: 'Yamaha Rivage PM / DM', port: 49280, beta: true },
-  { id: 'ah-sq', label: 'Allen & Heath SQ', port: 51325, beta: true },
-  { id: 'ah-dlive', label: 'Allen & Heath dLive / Avantis', port: 51325, beta: true },
 ]
 const consoleInfo = (id) => CONSOLES.find((c) => c.id === id) || CONSOLES[0]
 const consoleSel = () => $('console').value || 'x32'
@@ -233,8 +230,6 @@ function updateConsoleUi() {
     ? 'Beta — built from the published protocol; verify names/colours on your desk.'
     : ''
   $('console-note').hidden = !info.beta
-  // A&H dLive/Avantis: offer the reliable Show-CSV download (Import on the desk).
-  $('download-csv-btn').hidden = info.id !== 'ah-dlive'
 }
 
 function onConsoleChange() {
@@ -288,17 +283,6 @@ async function push() {
   }
 }
 
-async function downloadCsv() {
-  if (!patch?.channels?.length) return status('Load an event or patch file first.', 'err')
-  try {
-    const file = await call(B.exportAhCsv(patch.channels, patch.eventName))
-    if (!file) return
-    status(`Saved Show CSV → ${file}. Import it on the desk (or in Director).`, 'ok')
-  } catch (e) {
-    status(e.message, 'err')
-  }
-}
-
 async function loadFile() {
   try {
     const p = await call(B.patchFile())
@@ -338,7 +322,6 @@ window.addEventListener('DOMContentLoaded', () => {
   $('console').addEventListener('change', onConsoleChange)
   $('preview-btn').addEventListener('click', preview)
   $('push-btn').addEventListener('click', push)
-  $('download-csv-btn').addEventListener('click', downloadCsv)
   $('loadfile').addEventListener('click', loadFile)
   $('forget').addEventListener('click', forget)
 

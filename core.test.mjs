@@ -113,53 +113,7 @@ await new Promise((resolve) => {
   ok('xair ch1 name', xa[0].address === '/ch/01/config/name' && xa[0].args[0].value === 'Kick')
   ok('xair ch2 phantom on headamp 01', xa[5].address === '/headamp/01/phantom' && xa[5].args[0].value === 1)
 
-  // Yamaha SCP (TCP 49280): ASCII set-lines, 0-indexed channel.
-  ok('defaultPort yamaha = 49280', core.defaultPort('yamaha-clql') === 49280)
-  const ym = core.messagesFor(ch, { console: 'yamaha-clql' })
-  ok('yamaha: 3 lines × 3 channels', ym.length === 9)
-  ok('yamaha name line (0-indexed)', ym[0] === 'set MIXER:Current/InCh/Label/Name 0 0 "Kick"\n')
-  ok('yamaha colour name', ym[1] === 'set MIXER:Current/InCh/Label/Color 0 0 "Yellow"\n')
-  ok('yamaha 48V on', ym[5] === 'set MIXER:Current/InCh/HA/48V 1 0 1\n')
-
-  // Allen & Heath SQ (TCP 51325): one name SysEx per channel, F0…F7.
-  ok('defaultPort ah-sq = 51325', core.defaultPort('ah-sq') === 51325)
-  const ah = core.messagesFor(ch, { console: 'ah-sq' })
-  ok('ah-sq: one frame per non-overflow channel (incl ch17)', ah.length === 3)
-  ok('ah-sq frame is SysEx', ah[0][0] === 0xf0 && ah[0][ah[0].length - 1] === 0xf7)
-  ok('ah-sq A&H mfr id 00 00 1A', ah[0][1] === 0x00 && ah[0][2] === 0x00 && ah[0][3] === 0x1a)
-  ok('ah-sq carries the channel byte + name', ah[0].includes(0x00) && ah[0].includes('K'.charCodeAt(0)))
-
   ok('unknown console falls back to x32', core.driverFor('nope') === core.driverFor('x32'))
-}
-
-// 5b. Allen & Heath dLive/Avantis "Show CSV" export (Import on the desk)
-{
-  const csv = core.buildAhCsv([
-    { ch: 1, name: 'Kick', color: 'RD', phantom: false },
-    { ch: 4, name: 'OH L', color: 'CY', phantom: true },
-  ])
-  const lines = csv.trim().split('\r\n')
-  const find = (p) => lines.find((l) => l.startsWith(p)) || ''
-  ok('ah-csv [Version] header', lines[0].startsWith('[Version],V1.0'))
-  ok('ah-csv [Channels] header', lines[1].startsWith('[Channels]'))
-  ok('ah-csv input name + colour + socket', find('Input,1,').includes('"Kick",Red,MixRack,1'))
-  ok('ah-csv 48V On for phantom ch4', /^Input,4,"OH L",Cyan,MixRack,4,,27,Off,On,/.test(find('Input,4,')))
-  ok('ah-csv 48V Off for non-phantom ch1', /,27,Off,Off,/.test(find('Input,1,')))
-  ok('ah-csv unset input keeps its number as name', find('Input,9,').includes('"9",Green'))
-  ok('ah-csv emits 128 Input rows', lines.filter((l) => l.startsWith('Input,')).length === 128)
-  ok('ah-csv has Outputs + Virtual SoundCheck', !!find('[Outputs]') && !!find('[Virtual SoundCheck]'))
-  ok('ah-csv every row is 28 columns', lines.every((l) => l.split(',').length === 28))
-
-  // Non-ASCII / control chars must be stripped (A&H parser is strict ASCII).
-  const dirty = core.buildAhCsv([
-    { ch: 1, name: 'Vox “L”—é', color: 'RD', phantom: false }, // smart quotes, em-dash, accent
-    { ch: 2, name: 'Drum\r\nHit', color: 'GN', phantom: false }, // embedded CR/LF
-  ]).split('\r\n')
-  const dfind = (p) => dirty.find((l) => l.startsWith(p)) || ''
-  ok('ah-csv strips non-ASCII from names', dfind('Input,1,').includes('"Vox L"'))
-  ok('ah-csv strips embedded newline (no row desync)', dfind('Input,2,').includes('"DrumHit"'))
-  ok('ah-csv still 128 Input rows with dirty names', dirty.filter((l) => l.startsWith('Input,')).length === 128)
-  ok('ah-csv dirty rows still 28 cols', dirty.filter((l) => l.startsWith('Input,')).every((l) => l.split(',').length === 28))
 }
 
 // 6. TCP transport delivers frames to a local listener

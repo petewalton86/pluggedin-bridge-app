@@ -8,23 +8,19 @@ import path from 'node:path'
 import { readFile, writeFile } from 'node:fs/promises'
 import { buildMessages } from './x32.mjs'
 import { buildMessages as buildXAir } from './xair.mjs'
-import { buildMessages as buildYamaha } from './yamaha.mjs'
-import { buildMessages as buildAh } from './ah.mjs'
-import { buildAhCsv } from './ahcsv.mjs'
 import { sendMessages } from './udp.mjs'
 import { sendFrames } from './tcp.mjs'
 
-export { buildMessages, sendMessages, buildAhCsv }
+export { buildMessages, sendMessages }
 
-// Console driver registry. OSC drivers (udp) emit [{address,args}]; TCP drivers
-// emit raw frames (strings / Buffers). `port` is the per-console default.
+// Live-push driver registry — ONLY desks proven to accept a live push (OSC over
+// UDP). Yamaha (SCP) and Allen & Heath (MIDI) live push are unverified, so the
+// bridge doesn't offer them; their patch FILES are downloaded from the venue
+// event page instead. Re-add a desk here once it's bench-verified on hardware.
+// (The TCP transport stays wired below for re-enabling SCP/MIDI desks later.)
 const DRIVERS = {
   x32: { transport: 'udp', port: 10023, build: buildMessages },
   xair: { transport: 'udp', port: 10024, build: buildXAir },
-  'yamaha-clql': { transport: 'tcp', port: 49280, build: buildYamaha },
-  'yamaha-rivage': { transport: 'tcp', port: 49280, build: buildYamaha },
-  'ah-sq': { transport: 'tcp', port: 51325, build: (ch) => buildAh(ch, 'sq') },
-  'ah-dlive': { transport: 'tcp', port: 51325, build: (ch) => buildAh(ch, 'dlive') },
 }
 
 /** The driver for a console id (defaults to X32). */
